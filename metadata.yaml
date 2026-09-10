@@ -1,0 +1,34 @@
+# 插件的唯一标识名 (不要改)
+name: astrbot_plugin_qzone_publish
+
+# 插件展示名
+display_name: Qzone Publish (QQ空间说说)
+
+# 插件的一句话简介
+desc: 用 /说说 内容 直接在 QQ 空间发一条说说；支持手填 cookie 或向 NapCat 自动获取，带演习模式与用户白名单
+
+# 插件的详细帮助信息
+help: |
+  填好 cookies（含 p_skey）或开启 auto_fetch_cookie，然后 /说说 今天天气不错。
+  建议先保持 dry_run 打开试运行，确认无误后再关掉真发。
+  /检查说说登录 可查看当前登录态与目标 QQ 号。
+
+# (可选) 插件 Logo 文件名（对应插件目录下的 logo.png）
+# 使用 GitHub 绝对链接，避免 Cloud 构建时资源不同步
+logo: "https://raw.githubusercontent.com/Fangnai-byte/astrbot_plugin_qzone_publish/main/logo.png"
+
+# (可选) 你的 GitHub 仓库地址
+repo: "https://github.com/Fangnai-byte/astrbot_plugin_qzone_publish"
+
+# 插件版本号
+version: 0.1.1
+
+# 作者名
+author: 綾地 寧々&Fangnai-byte
+
+# 声明支持的平台
+support_platforms:
+  - aiocqhttp
+
+# 声明支持的 AstrBot 版本范围
+astrbot_version: ">=v4.12.0"

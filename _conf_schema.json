@@ -1,0 +1,43 @@
+{
+  "enabled": {
+    "description": "总开关",
+    "type": "bool",
+    "default": true
+  },
+  "dry_run": {
+    "description": "演习模式：只检查不真发，确认无误后再关掉",
+    "type": "bool",
+    "default": true
+  },
+  "cookies": {
+    "description": "QQ空间 cookie（含 p_skey 的那一整串；自动取失败时用这个）",
+    "type": "string",
+    "default": "",
+    "obvious_hint": true
+  },
+  "uin": {
+    "description": "要发说说的 QQ 号（留空则从 cookie 的 uin 里读）",
+    "type": "string",
+    "default": ""
+  },
+  "auto_fetch_cookie": {
+    "description": "先试着向协议端（NapCat）要 cookie，失败再用上面的手填值",
+    "type": "bool",
+    "default": true
+  },
+  "allow_user_ids": {
+    "description": "允许使用命令的 QQ 号（留空=所有人）",
+    "type": "list",
+    "default": []
+  },
+  "max_length": {
+    "description": "说说最长多少字",
+    "type": "int",
+    "default": 900
+  },
+  "timeout_sec": {
+    "description": "请求超时（秒）",
+    "type": "int",
+    "default": 30
+  }
+}
