@@ -1,5 +1,7 @@
 # Qzone Publish（QQ空间说说）
 
+![logo](logo.png)
+
 让宁宁自己发说说：`/说说 晚风溜进部室……`。
 
 ## 用法
