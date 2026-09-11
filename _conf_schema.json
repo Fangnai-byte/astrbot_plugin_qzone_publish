@@ -1,4 +1,4 @@
-{
+﻿{
   "enabled": {
     "description": "总开关",
     "type": "bool",
@@ -44,5 +44,35 @@
     "description": "请求超时（秒）",
     "type": "int",
     "default": 30
+  },
+  "tool_enabled": {
+    "description": "允许宁宁通过对话自主发说说（LLM 工具 qzone_publish_say）",
+    "type": "bool",
+    "default": true
+  },
+  "oneshot_on_load": {
+    "description": "插件加载时自动发一条说说（一次性，靠 flag 去重，验证自主发布用）",
+    "type": "bool",
+    "default": false
+  },
+  "oneshot_delay": {
+    "description": "加载后延迟多少秒再发那条一次性说说（等协议端就绪）",
+    "type": "int",
+    "default": 8
+  },
+  "oneshot_content": {
+    "description": "一次性说说的正文（留空则不自动发）",
+    "type": "string",
+    "default": ""
+  },
+  "oneshot_flag_path": {
+    "description": "一次性发布的去重标记文件路径",
+    "type": "string",
+    "default": "/root/qzone_oneshot.flag"
+  },
+  "oneshot_result_path": {
+    "description": "一次性发布结果写入的文件路径（方便外部读取成功与否）",
+    "type": "string",
+    "default": "/root/qzone_oneshot_result.json"
   }
 }

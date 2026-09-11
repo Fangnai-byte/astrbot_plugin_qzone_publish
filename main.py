@@ -20,8 +20,10 @@
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import importlib
+import json
 import os
 import re
 import time
@@ -68,6 +70,8 @@ def _dbg(msg: str) -> None:
 
 
 COMMANDS = ("说说", "发说说", "qzone", "空间")
+ONESHOT_FLAG = "/root/qzone_oneshot.flag"
+ONESHOT_RESULT = "/root/qzone_oneshot_result.json"
 IMG_EXT = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".jfif")
 URL_RE = re.compile(r"https?://[^\s'\"<>（）()【】]+")
 
@@ -114,6 +118,55 @@ class QzonePublishPlugin(Star):
     def _timeout(self):
         return aiohttp.ClientTimeout(total=int(self._conf("timeout_sec", 30)))
 
+    # ---------------- 一次性自主发布（不需要任何人发命令） ----------------
+    async def initialize(self):
+        """插件加载后，若开了 oneshot_on_load 就自己发一条。"""
+        if not self._conf("oneshot_on_load", False):
+            return
+        flag = str(self._conf("oneshot_flag_path", ONESHOT_FLAG) or ONESHOT_FLAG)
+        if os.path.exists(flag):
+            logger.info("[Qzone] 一次性任务跑过了，跳过；想再来一次就删掉 flag 文件")
+            return
+        try:
+            with open(flag, "w", encoding="utf-8") as f:
+                f.write(str(time.time()))
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[Qzone] 落 flag 失败: {e}")
+        asyncio.create_task(self._oneshot_job())
+        logger.info("[Qzone] 自主发布任务已排入后台，等协议端就绪后动手")
+
+    async def _oneshot_job(self):
+        await asyncio.sleep(max(0, int(self._conf("oneshot_delay", 8))))
+        content = str(self._conf("oneshot_content", "") or "")
+        ok, msg = False, "没执行"
+        try:
+            ok, msg = await self.publish(content)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"[Qzone] 自主发布异常: {e}")
+            msg = f"异常：{e}"
+        path = str(
+            self._conf("oneshot_result_path", ONESHOT_RESULT) or ONESHOT_RESULT
+        )
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "ok": ok,
+                        "message": msg,
+                        "content": content,
+                        "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    },
+                    f,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"[Qzone] 写结果失败: {e}")
+        logger.info(f"[Qzone] [OneShot] ok={ok} result={msg}")
+
+    async def terminate(self):
+        pass
+
     # ---------------- cookie ----------------
     async def _fetch_cookie_from_bot(self, event: AstrMessageEvent) -> str:
         bot = getattr(event, "bot", None)
@@ -147,13 +200,71 @@ class QzonePublishPlugin(Star):
                 return ret
         return ""
 
-    async def _resolve_cookie(self, event: AstrMessageEvent) -> str:
+    @staticmethod
+    def _extract_cookie(ret) -> str:
+        if isinstance(ret, dict):
+            inner = ret.get("data")
+            data = inner if isinstance(inner, dict) else ret
+            return str(data.get("cookies") or data.get("cookie") or "")
+        if isinstance(ret, str):
+            return ret
+        return ""
+
+    def _platform_call_action(self):
+        """没有 event 的时候，直接从平台实例里摸出 call_action。"""
+        pm = getattr(self.context, "platform_manager", None)
+        insts = pm.get_insts() if pm else []
+        for inst in insts or []:
+            name = ""
+            try:
+                name = inst.meta().name
+            except Exception:  # noqa: BLE001
+                name = type(inst).__name__
+            if name not in ("aiocqhttp", type(inst).__name__):
+                continue
+            client = None
+            getter = getattr(inst, "get_client", None)
+            if callable(getter):
+                try:
+                    client = getter()
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"[Qzone] get_client 失败: {e}")
+            for obj in (client, getattr(inst, "bot", None), getattr(inst, "api", None)):
+                act = getattr(obj, "call_action", None)
+                if callable(act):
+                    return act
+        logger.warning("[Qzone] 没找到可用的 aiocqhttp 实例，取不到 cookie")
+        return None
+
+    async def _fetch_cookie_from_platform(self) -> str:
+        act = self._platform_call_action()
+        if act is None:
+            return ""
+        for domain in ("user.qzone.qq.com", "qzone.qq.com", "qq.com"):
+            try:
+                ret = await act("get_cookies", domain=domain)
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[Qzone] 平台取 cookie 失败({domain}): {e}")
+                continue
+            cookie = self._extract_cookie(ret)
+            if cookie:
+                logger.info(f"[Qzone] 从平台实例拿到 cookie({domain}) 长度={len(cookie)}")
+                return cookie
+        return ""
+
+    async def _resolve_cookie_any(self, event: AstrMessageEvent | None = None) -> str:
         cookie = ""
         if self._conf("auto_fetch_cookie", False):
-            cookie = await self._fetch_cookie_from_bot(event)
+            if event is not None:
+                cookie = await self._fetch_cookie_from_bot(event)
+            if not cookie:
+                cookie = await self._fetch_cookie_from_platform()
         if not cookie:
             cookie = str(self._conf("cookies", "") or "")
         return cookie.strip()
+
+    async def _resolve_cookie(self, event: AstrMessageEvent) -> str:
+        return await self._resolve_cookie_any(event)
 
     def _resolve_uin(self, cookie: str) -> str:
         uin = str(self._conf("uin", "") or "").strip()
@@ -422,6 +533,77 @@ class QzonePublishPlugin(Star):
                 _dbg("发布返回 status=%s body=%s" % (resp.status, text[:200]))
                 return resp.status, text[:400]
 
+    # ---------------- 发布核心：命令、工具、自主任务都走这里 ----------------
+    async def publish(
+        self,
+        content: str,
+        image_srcs: List[str] | None = None,
+        event: AstrMessageEvent | None = None,
+        dry_run: bool | None = None,
+    ) -> Tuple[bool, str]:
+        """发一条说说，返回 (是否成功, 给人看的话)。event 可以为空。"""
+        text = (content or "").strip()
+        seen, pics = set(), []
+        for s in image_srcs or []:
+            s = str(s or "").strip()
+            if s and s not in seen:
+                seen.add(s)
+                pics.append(s)
+        if len(pics) > MAX_IMAGES:
+            logger.info(f"[Qzone] 图片超过 {MAX_IMAGES} 张，只带前 {MAX_IMAGES} 张")
+            pics = pics[:MAX_IMAGES]
+        if not text and not pics:
+            return False, "要发什么呢？内容不能是空的。"
+        max_len = int(self._conf("max_length", 900))
+        if len(text) > max_len:
+            return False, f"太长啦，说说最多 {max_len} 字。"
+
+        cookie = await self._resolve_cookie_any(event)
+        ok, msg = check_cookie(cookie)
+        if not ok:
+            return False, f"登录态不行：{msg}"
+        uin = self._resolve_uin(cookie)
+        if not uin:
+            return False, "没找到要发说说的 QQ 号，请在配置里填 uin。"
+
+        richval = ""
+        if pics:
+            try:
+                richvals = await self._upload_all(cookie, uin, pics)
+                richval = join_richvals(richvals)
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"[Qzone] 图片上传失败: {e}")
+                _dbg("图片上传异常:\n" + traceback.format_exc())
+                return False, f"图片没传上去：{e}"
+
+        is_dry = self._conf("dry_run", True) if dry_run is None else dry_run
+        if is_dry:
+            logger.info(
+                f"[Qzone] 演习模式，不发送。uin={uin} 图片数={len(pics)} "
+                f"richval长度={len(richval)} 内容={text}"
+            )
+            return False, (
+                f"演习模式：本来会发「{text}」，带 {len(pics)} 张图，"
+                "配置里关掉 dry_run 就真发。"
+            )
+
+        try:
+            status, body = await self._publish(cookie, uin, text, richval)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"[Qzone] 发布异常: {e}")
+            _dbg("发布异常: %s\n%s" % (e, traceback.format_exc()))
+            return False, f"发送出错了：{e}"
+        if status == 200 and ('"code":0' in body.replace(" ", "") or '"tid"' in body):
+            logger.info(f"[Qzone] 发布成功: {body[:200]}")
+            tip = (
+                f"发出去啦，带了 {len(pics)} 张图，去空间看看吧"
+                if pics
+                else "发出去啦，去空间看看吧"
+            )
+            return True, tip
+        logger.warning(f"[Qzone] 发布失败 http={status} body={body}")
+        return False, f"好像失败了（HTTP {status}）：{body[:120]}"
+
     # ---------------- 命令 ----------------
     @filter.command(
         "说说",
@@ -444,70 +626,53 @@ class QzonePublishPlugin(Star):
             srcs = await self._collect_images(event)
             text, from_text = split_text_and_images(text)
             srcs.extend(from_text)
-        # 去重、限量
-        seen, pics = set(), []
-        for s in srcs:
-            if s not in seen:
-                seen.add(s)
-                pics.append(s)
-        pics = pics[:MAX_IMAGES]
-        if len(srcs) > MAX_IMAGES:
-            logger.info(f"[Qzone] 图片超过 {MAX_IMAGES} 张，只带前 {MAX_IMAGES} 张")
-
-        if not text and not pics:
-            yield event.plain_result("要发什么呢？写成 /说说 内容 就好，也可以直接带上图片。")
-            return
-        max_len = int(self._conf("max_length", 900))
-        if len(text) > max_len:
-            yield event.plain_result(f"太长啦，说说最多 {max_len} 字。")
-            return
-
-        cookie = await self._resolve_cookie(event)
-        ok, msg = check_cookie(cookie)
-        if not ok:
-            yield event.plain_result(f"登录态不行：{msg}")
-            return
-        uin = self._resolve_uin(cookie)
-        if not uin:
-            yield event.plain_result("没找到要发说说的 QQ 号，请在配置里填 uin。")
-            return
-
-        richval = ""
-        if pics:
-            try:
-                richvals = await self._upload_all(cookie, uin, pics)
-                richval = join_richvals(richvals)
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"[Qzone] 图片上传失败: {e}")
-                _dbg("图片上传异常:\n" + traceback.format_exc())
-                yield event.plain_result(f"图片没传上去：{e}")
-                return
-
-        if self._conf("dry_run", True):
-            logger.info(
-                f"[Qzone] 演习模式，不发送。uin={uin} 图片数={len(pics)} "
-                f"richval长度={len(richval)} 内容={text}"
-            )
-            yield event.plain_result(
-                f"演习模式：本来会发「{text}」，带 {len(pics)} 张图，"
-                "配置里关掉 dry_run 就真发。"
-            )
-            return
-
         try:
-            status, body = await self._publish(cookie, uin, text, richval)
+            ok, msg = await self.publish(text, srcs, event)
         except Exception as e:  # noqa: BLE001
-            logger.error(f"[Qzone] 发布异常: {e}")
-            _dbg("发布异常: %s\n%s" % (e, traceback.format_exc()))
-            yield event.plain_result(f"发送出错了：{e}")
-            return
-        if status == 200 and ('"code":0' in body.replace(" ", "") or '"tid"' in body):
-            logger.info(f"[Qzone] 发布成功: {body[:200]}")
-            tip = f"发出去啦，带了 {len(pics)} 张图，去空间看看吧～" if pics else "发出去啦，去空间看看吧～"
-            yield event.plain_result(tip)
-        else:
-            logger.warning(f"[Qzone] 发布失败 http={status} body={body}")
-            yield event.plain_result(f"好像失败了（HTTP {status}）：{body[:120]}")
+            logger.error(f"[Qzone] 命令发布异常: {e}")
+            _dbg("命令发布异常:\n" + traceback.format_exc())
+            msg = f"出错了：{e}"
+        yield event.plain_result(msg)
+
+    # ---------------- LLM 工具：宁宁自己想发就发 ----------------
+    @filter.llm_tool(name="qzone_publish_say")
+    async def tool_publish_say(
+        self,
+        event: AstrMessageEvent,
+        content: str,
+        image_urls: str = "",
+    ):
+        """发一条 QQ 空间说说，把此刻的心情写进自己的空间。
+
+        Args:
+            content(string): 说说的正文，别超过配置的字数上限，也别用颜文字和表情
+            image_urls(string): 可选配图，http 直链或本地路径，多张用英文逗号隔开
+        """
+        if not self._conf("enabled", True):
+            return "说说功能没开，发不了。"
+        if not self._conf("tool_enabled", True):
+            return "自主发布没开，要发的话得先让共犯在配置里打开。"
+        if not self._is_allowed(event):
+            return "不在白名单里，不能替你发说说。"
+        srcs: List[str] = []
+        if self._conf("enable_image", True):
+            try:
+                srcs.extend(await self._collect_images(event))
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"[Qzone] 工具收图失败: {e}")
+        for tok in re.split(r"[,，\s]+", image_urls or ""):
+            if tok.strip():
+                srcs.append(tok.strip())
+        text = content or ""
+        if self._conf("enable_image", True):
+            text, from_text = split_text_and_images(text)
+            srcs.extend(from_text)
+        try:
+            ok, msg = await self.publish(text, srcs, event)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"[Qzone] 工具发布异常: {e}")
+            return f"出错了：{e}"
+        return msg
 
     async def _check_reply(self, event: AstrMessageEvent):
         cookie = await self._resolve_cookie(event)
