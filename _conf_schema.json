@@ -46,7 +46,7 @@
     "default": 30
   },
   "tool_enabled": {
-    "description": "允许宁宁通过对话自主发说说（LLM 工具 qzone_publish_say）",
+    "description": "允许机器人通过对话自主发说说（LLM 工具 qzone_publish_say）",
     "type": "bool",
     "default": true
   },

@@ -634,7 +634,7 @@ class QzonePublishPlugin(Star):
             msg = f"出错了：{e}"
         yield event.plain_result(msg)
 
-    # ---------------- LLM 工具：宁宁自己想发就发 ----------------
+    # ---------------- LLM 工具：机器人自己想发就发 ----------------
     @filter.llm_tool(name="qzone_publish_say")
     async def tool_publish_say(
         self,

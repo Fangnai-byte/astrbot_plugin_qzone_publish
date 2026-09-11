@@ -1,7 +1,7 @@
 # 更新日志
 
 ## v0.2.1
-- 新增：LLM 工具 `qzone_publish_say`，宁宁可以在对话里自主发说说（受 `tool_enabled` 控制）。
+- 新增：LLM 工具 `qzone_publish_say`，机器人可以在对话里自主发说说（受 `tool_enabled` 控制）。
 - 新增：发布逻辑与命令解耦，新增无 `event` 依赖的 `publish()` 入口，命令行与工具共用。
 - 新增：一次性自主发布（`oneshot_on_load` / `oneshot_delay` / `oneshot_content`），靠 flag 文件去重，加载后延迟自动发一条。
 - 新增：一次性发布结果写入 `oneshot_result_path`，方便外部判定成功与否。

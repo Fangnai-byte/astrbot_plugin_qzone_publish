@@ -2,7 +2,7 @@
 
 ![logo](logo.png)
 
-让宁宁自己发说说：`/说说 晚风溜进部室……`，还能带图；也可以让宁宁在对话里自己决定发一条。
+让机器人自己发说说：`/说说 晚风溜进部室……`，还能带图；也可以让机器人在对话里自己决定发一条。
 
 ## 用法
 
@@ -11,9 +11,9 @@
 | `/说说 内容` | 发一条说说（别名 `/发说说`、`/qzone`） |
 | `/检查说说登录` | 检查 cookie 是否够用、目标 QQ 是哪个 |
 
-## 让宁宁自己发（LLM 工具）
+## 让机器人自己发（LLM 工具）
 
-开启 `tool_enabled` 后，插件会注册 LLM 工具 `qzone_publish_say`。宁宁在对话里想发说说时，自己调用它即可，不需要任何人敲命令。
+开启 `tool_enabled` 后，插件会注册 LLM 工具 `qzone_publish_say`。机器人在对话里想发说说时，自己调用它即可，不需要任何人敲命令。
 
 - `content`：说说正文。
 - `image_urls`：配图，http 直链或本地路径，多张用英文逗号隔开。
@@ -41,7 +41,7 @@
 - `auto_fetch_cookie`：先向协议端（NapCat）请求 `get_cookies`，失败再用 `cookies`。
 - `allow_user_ids`：允许用命令的 QQ 号，留空=所有人。
 - `max_length` / `timeout_sec`：内容长度上限和请求超时。
-- `tool_enabled`：是否注册 LLM 工具 `qzone_publish_say`，让宁宁能自主发说说。
+- `tool_enabled`：是否注册 LLM 工具 `qzone_publish_say`，让机器人能自主发说说。
 - `oneshot_on_load` / `oneshot_delay` / `oneshot_content`：加载后延迟自动发一条（一次性，flag 去重），平时保持关闭。
 - `oneshot_flag_path` / `oneshot_result_path`：上面的去重标记与结果文件路径。
 
