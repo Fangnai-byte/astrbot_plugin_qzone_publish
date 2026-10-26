@@ -1,4 +1,4 @@
-﻿{
+{
   "enabled": {
     "description": "总开关",
     "type": "bool",
@@ -21,7 +21,7 @@
     "default": ""
   },
   "auto_fetch_cookie": {
-    "description": "先试着向协议端（NapCat）要 cookie，失败再用上面的手填值",
+    "description": "先试着向协议端（SnowLuma 等 OneBot 实现）要 cookie，失败再用上面的手填值",
     "type": "bool",
     "default": true
   },
@@ -74,5 +74,107 @@
     "description": "一次性发布结果写入的文件路径（方便外部读取成功与否）",
     "type": "string",
     "default": "/root/qzone_oneshot_result.json"
+  },
+  "daily_at": {
+    "description": "每天定时发说说的时刻（如 20:00，可多个）",
+    "type": "list",
+    "default": [],
+    "hint": "填 HH:MM，每个时刻当天只发一次；留空=不定时发。正文来自 daily_content，留空则由模型现写。"
+  },
+  "daily_content": {
+    "description": "定时说说的固定正文（留空=让模型现写）",
+    "type": "string",
+    "default": "",
+    "hint": "填了就一直发这句；想每天不一样就留空，改由 daily_prompt 让模型写。"
+  },
+  "daily_prompt": {
+    "description": "让模型写定时说说时的提示词（daily_content 留空时生效）",
+    "type": "string",
+    "default": "翻一下下面给你的聊天记录，挑一个你最有感觉的瞬间，用第一人称写一条 QQ 空间说说。\n\n要求：\n- 只写那一件事或那一个瞬间，别按时间顺序罗列谁说了什么。\n- 不要汇报体，不要总结成「今天聊了 A、B、C」。\n- 不要点评、不要升华，结尾别加一句道理。\n- 聊天记录只是让你有感觉，别引用、别复述里面的原话，用自己的话说。\n- 口语一点，50 到 120 字，像自己随手打的。\n- 只输出正文，不要引号、不要话题标签、不要表情符号。",
+    "hint": "可用占位符 {date}（2026-10-26）、{time}（20:00）、{weekday}（日/一/二…）。素材是原料，不是提纲。"
+  },
+  "daily_fallback": {
+    "description": "模型没写出来时用的兜底文案（留空=这次直接跳过）",
+    "type": "string",
+    "default": "",
+    "hint": "模型超时/报错/返回空时才用它，不会覆盖模型正常写出的内容。"
+  },
+  "daily_context_groups": {
+    "description": "给模型当素材的群号（本插件自己记录这些群的聊天）",
+    "type": "list",
+    "default": [],
+    "hint": "填了你才会记这些群的聊天当素材；不依赖任何别的插件。留空=不记群聊。"
+  },
+  "daily_record": {
+    "description": "自己记录聊天当素材",
+    "type": "bool",
+    "default": true,
+    "hint": "开着时，只会记 daily_context_groups / daily_context_friends 里列出的会话，其它地方不碰。"
+  },
+  "daily_record_keep_days": {
+    "description": "素材保留几天",
+    "type": "int",
+    "default": 7,
+    "hint": "超期的聊天记录会在下次写入时清掉。"
+  },
+  "daily_record_per_session": {
+    "description": "每个会话最多记多少条",
+    "type": "int",
+    "default": 200,
+    "hint": "超出丢最早的。文件很小，两百条也就几十 KB。"
+  },
+  "daily_context_file": {
+    "description": "素材文件路径（留空=自动放在 data/plugin_data/astrbot_plugin_qzone_publish/）",
+    "type": "string",
+    "default": "",
+    "hint": "一般不用填。这是插件自己记聊天用的文件；想读**外部**记录用 daily_context_paths。"
+  },
+  "daily_context_paths": {
+    "description": "外部聊天记录路径（文件 / 目录 / 通配符，可多条）",
+    "type": "list",
+    "default": [],
+    "hint": "原样读这些文件的最后若干行当素材，不解析格式——别的插件导出的、手动存的都能用。多个群/私聊就写多条，一条匹配到多个文件时读几个见下一条。"
+  },
+  "daily_context_paths_max_files": {
+    "description": "每条外部路径最多读几个文件",
+    "type": "int",
+    "default": 1,
+    "hint": "目录或通配符匹配到多个文件时：1=只读最新的（默认）；填 3 就是按修改时间读最新 3 个，旧的排前面，最后统一按 daily_context_lines 截尾。"
+  },
+  "daily_per_bot": {
+    "description": "每个 bot 各发一条（用自己的 cookie/uin 和上下文）",
+    "type": "bool",
+    "default": true,
+    "hint": "开着就遍历所有启用的 aiocqhttp 实例各发一条；关掉则用全局 uin/cookies 只发一条。"
+  },
+  "daily_prompt_map": {
+    "description": "按 bot 覆盖提示词（每行 `平台id,提示词`）",
+    "type": "list",
+    "default": [],
+    "hint": "平台id 是面板里那个 bot 的名字（如 绫地宁宁）。不填就用 daily_prompt。"
+  },
+  "daily_context_friends": {
+    "description": "给模型当素材的私聊对象 QQ 号",
+    "type": "list",
+    "default": [],
+    "hint": "优先用本插件自己记的私聊；刚开始没记录时回落到 AstrBot 会话历史（data/data_v4.db）。"
+  },
+  "daily_context_db": {
+    "description": "会话库路径（留空=自动用 data/data_v4.db）",
+    "type": "string",
+    "default": "",
+    "hint": "只有把 AstrBot 数据放在别处时才需要填。"
+  },
+  "daily_context_lines": {
+    "description": "从群聊日志里取多少条最近消息",
+    "type": "int",
+    "default": 40,
+    "hint": "取今天、没有则取昨天的归档；条数越多上下文越长，费 token。"
+  },
+  "daily_context_max_chars": {
+    "description": "上下文最多占多少字",
+    "type": "int",
+    "default": 1500,
+    "hint": "超出就只保留最后这么多字。"
   }
 }
