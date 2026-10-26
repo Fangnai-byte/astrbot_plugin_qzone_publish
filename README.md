@@ -57,7 +57,7 @@
 - `daily_context_file` / `daily_context_db`：素材文件与会话库路径，一般留空。
 - `daily_context_paths`：**外部聊天记录**（可选）。每项可以是文件、目录或通配符，插件按时间取最新的那个，
   把最后若干行**原样**当素材——不解析格式，别的插件导出的、自己手动存的都能直接指。
-  例：`data/workspaces/group_logs/astrbot_1108558028_*.log`。
+  例：`data/workspaces/group_logs/astrbot_11111_*.log`。
 - `daily_context_lines` / `daily_context_max_chars`：取多少条、上下文总共多少字（默认 40 条 / 1500 字）。
 - `daily_per_bot`：**每个 bot 各发一条**（默认开）。遍历所有启用的 aiocqhttp 实例，各用各的 cookie/uin、
   各取自己的会话上下文；去重按 bot 分开。关掉则用全局 `uin`/`cookies` 只发一条。
